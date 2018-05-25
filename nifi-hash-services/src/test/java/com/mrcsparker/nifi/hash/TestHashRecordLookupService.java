@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package hash;
+package com.mrcsparker.nifi.hash;
 
 import org.apache.nifi.serialization.record.Record;
 import org.apache.nifi.util.TestRunner;
@@ -40,7 +40,7 @@ public class TestHashRecordLookupService {
         runner = TestRunners.newTestRunner(testProcessor);
 
         service = new HashRecordLookupService();
-        runner.addControllerService("hash-pii-record-lookup-service", service);
+        runner.addControllerService("com.mrcsparker.nifi.hash-pii-record-lookup-service", service);
         runner.setProperty(service, HashRecordLookupService.HASH_KEY, "4BAC2739-3BDD-9777-CE02453256C5");
     }
 
@@ -48,6 +48,7 @@ public class TestHashRecordLookupService {
     public void testSimpleHash() throws Exception {
         Map<String, Object> criteria = new HashMap<>();
         criteria.put("the-key", "sample key");
+
         final Optional<Record> get1 = service.lookup(criteria);
         assertTrue(get1.isPresent());
         assertEquals("6de3370355ab6ef0c8aa935f9edbe74482242809934bb07f54c712f0d9e562fb", get1.get().getAsString("the-key"));
@@ -58,6 +59,7 @@ public class TestHashRecordLookupService {
         Map<String, Object> criteria = new HashMap<>();
         criteria.put("the-first-key", "sample key");
         criteria.put("the-second-key", "sample key");
+
         final Optional<Record> get1 = service.lookup(criteria);
         assertTrue(get1.isPresent());
         assertEquals("b62bf8147e9ce794837d39364cff30353ccf819f24e79e56d31f93bc0342a009", get1.get().getAsString("the-first-key"));

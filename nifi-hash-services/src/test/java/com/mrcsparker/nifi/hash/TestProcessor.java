@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package hash;
+package com.mrcsparker.nifi.hash;
 
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.lookup.LookupService;
@@ -36,8 +36,8 @@ public class TestProcessor extends AbstractProcessor {
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         List<PropertyDescriptor> propDescs = new ArrayList<>();
         propDescs.add(new PropertyDescriptor.Builder()
-                .name("MyService test processor")
-                .description("MyService test processor")
+                .name("Hash Lookup test processor")
+                .description("Hash Lookup test processor")
                 .identifiesControllerService(LookupService.class)
                 .required(true)
                 .build());
