@@ -29,7 +29,7 @@ import java.util.Optional;
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
 
-public class TesthashRecordLookupService {
+public class TestHashRecordLookupService {
 
     private TestRunner runner;
     private HashRecordLookupService service;
@@ -39,7 +39,7 @@ public class TesthashRecordLookupService {
         TestProcessor testProcessor = new TestProcessor();
         runner = TestRunners.newTestRunner(testProcessor);
 
-        service = new hashRecordLookupService();
+        service = new HashRecordLookupService();
         runner.addControllerService("hash-pii-record-lookup-service", service);
         runner.setProperty(service, HashRecordLookupService.HASH_KEY, "4BAC2739-3BDD-9777-CE02453256C5");
     }
