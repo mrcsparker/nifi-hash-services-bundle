@@ -1,0 +1,15 @@
+
+{
+  "name": "member",
+  "namespace": "com.mrcsparker",
+  "type": "record",
+  "fields": [
+    { "name": "member_id", "type": [ "null", "string" ] },
+    { "name": "first_name", "type": [ "null", "string" ] },
+    { "name": "last_name", "type": [ "null", "string" ] },
+    { "name": "phone_number", "type": [ "null", "string" ] },
+    { "name": "parent_name", "type": [ "null", "string" ] },
+    { "name": "hashed_first_name", "type": [ "null", "string" ] },
+    { "name": "hashed_last_name", "type": [ "null", "string" ] }
+  ]
+}

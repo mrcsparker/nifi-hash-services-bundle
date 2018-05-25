@@ -1,4 +1,4 @@
-# nifi-com.mrcsparker.nifi.hash-services-bundle
+# nifi-hash-services-bundle
 
 Apache NiFi Lookup Services for data hashing.
 
@@ -25,4 +25,16 @@ Apache NiFi Lookup Services for data hashing.
 > cd nifi-hash-services-bundle
 > mvn clean && mvn test
 ```
+
+## Sample dataflow
+
+See the [./examples](./examples) directory.
+
+### Dataflow
+
+![Data Flow](./images/dataflow.png)
+
+### Configuration
+
+![Configuration](./images/config.png)
 
