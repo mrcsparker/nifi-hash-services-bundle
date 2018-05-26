@@ -51,7 +51,7 @@ public class TestHashRecordLookupService {
 
         final Optional<Record> get1 = service.lookup(criteria);
         assertTrue(get1.isPresent());
-        assertEquals("6de3370355ab6ef0c8aa935f9edbe74482242809934bb07f54c712f0d9e562fb", get1.get().getAsString("the-key"));
+        assertEquals("620a8a34c1f06d4707c12d30c7d20a3b7e9f4d166bbeb28ad5a272883eee0bc5", get1.get().getAsString("the-key"));
     }
 
     @Test
@@ -62,7 +62,29 @@ public class TestHashRecordLookupService {
 
         final Optional<Record> get1 = service.lookup(criteria);
         assertTrue(get1.isPresent());
-        assertEquals("b62bf8147e9ce794837d39364cff30353ccf819f24e79e56d31f93bc0342a009", get1.get().getAsString("the-first-key"));
-        assertEquals("56652afe88563348971138a737e127cf523e29d07544e0a8578af9dd61d3eee2", get1.get().getAsString("the-second-key"));
+        assertEquals("620a8a34c1f06d4707c12d30c7d20a3b7e9f4d166bbeb28ad5a272883eee0bc5", get1.get().getAsString("the-first-key"));
+        assertEquals("620a8a34c1f06d4707c12d30c7d20a3b7e9f4d166bbeb28ad5a272883eee0bc5", get1.get().getAsString("the-second-key"));
+    }
+
+    @Test
+    public void testNullHash() throws Exception {
+        Map<String, Object> criteria = new HashMap<>();
+        criteria.put("the-null-key", null);
+
+        final Optional<Record> get1 = service.lookup(criteria);
+        assertTrue(get1.isPresent());
+
+        assertEquals(null, get1.get().getAsString("the-null-key"));
+    }
+
+    @Test
+    public void testEmptylHash() throws Exception {
+        Map<String, Object> criteria = new HashMap<>();
+        criteria.put("the-empty-key", "");
+
+        final Optional<Record> get1 = service.lookup(criteria);
+        assertTrue(get1.isPresent());
+
+        assertEquals("", get1.get().getAsString("the-empty-key"));
     }
 }

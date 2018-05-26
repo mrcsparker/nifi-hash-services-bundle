@@ -28,12 +28,16 @@ import org.apache.nifi.serialization.record.MapRecord;
 import org.apache.nifi.serialization.record.Record;
 import org.apache.nifi.serialization.record.RecordField;
 import org.apache.nifi.serialization.record.RecordFieldType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 @Tags({ "hash"})
 @CapabilityDescription("Hash Lookup Service")
 public class HashRecordLookupService extends AbstractHashLookupService<Record> {
+
+    static final Logger LOG = LoggerFactory.getLogger(HashRecordLookupService.class);
 
     private final List<PropertyDescriptor> propertyDescriptors;
 
@@ -56,7 +60,14 @@ public class HashRecordLookupService extends AbstractHashLookupService<Record> {
 
         for (String column : coordinates.keySet()) {
             fields.add(new RecordField(column, RecordFieldType.STRING.getDataType()));
-            res.put(column, getHash(column));
+
+            if (coordinates.get(column) == null) {
+                res.put(column, null);
+            } else if (coordinates.get(column).toString().isEmpty()) {
+                res.put(column, "");
+            } else {
+                res.put(column, getHash(coordinates.get(column).toString()));
+            }
         }
 
         return Optional.of(new MapRecord(new SimpleRecordSchema(fields), res));

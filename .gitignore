@@ -237,5 +237,6 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+copy.sh
 
 # End of https://www.gitignore.io/api/java,code,linux,macos,maven,windows,eclipse,intellij+all
