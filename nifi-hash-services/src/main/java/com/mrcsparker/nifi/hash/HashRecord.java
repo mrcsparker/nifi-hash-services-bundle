@@ -43,12 +43,6 @@ public class HashRecord extends AbstractRecordProcessor  {
 
     static final Logger LOG = LoggerFactory.getLogger(HashRecord.class);
 
-    private String hashKey;
-    private String hashAlgorithm;
-
-    private volatile RecordPathCache recordPathCache;
-    private volatile List<String> recordPaths;
-
     static final PropertyDescriptor HASH_KEY = new PropertyDescriptor.Builder()
             .name("key")
             .displayName("Hash Key")
@@ -57,6 +51,12 @@ public class HashRecord extends AbstractRecordProcessor  {
             .sensitive(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
+
+    private String hashKey;
+    private String hashAlgorithm;
+
+    private volatile RecordPathCache recordPathCache;
+    private volatile List<String> recordPaths;
 
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
@@ -75,6 +75,7 @@ public class HashRecord extends AbstractRecordProcessor  {
                 .required(false)
                 .dynamic(true)
                 .expressionLanguageSupported(true)
+                .sensitive(false)
                 .addValidator(new RecordPathPropertyNameValidator())
                 .build();
     }

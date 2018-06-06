@@ -51,4 +51,20 @@ public class TestKeyHashRecord {
         final MockFlowFile out = runner.getFlowFilesForRelationship(HashRecord.REL_SUCCESS).get(0);
         out.assertContentEquals("header\ne0017d72714affa14ee435f57450d4364d2161e2f0abf90019964f1263c1d073,sample key\nebb59f4d65174fa86f81d0b37f2ee2d3d6dff4f1ccebc303416cf78e488a083e,123 address\n");
     }
+
+    @Test
+    public void testNotAvailableHash() {
+        runner.setProperty("a", "/name");
+        runner.setProperty("b", "/address");
+        runner.setProperty("c", "/foo");
+        runner.enqueue("");
+        runner.setValidateExpressionUsage(false);
+
+        readerService.addRecord("sample key", "123 address", 35, "", "");
+        runner.run();
+
+        runner.assertAllFlowFilesTransferred(HashRecord.REL_SUCCESS, 1);
+        final MockFlowFile out = runner.getFlowFilesForRelationship(HashRecord.REL_SUCCESS).get(0);
+        out.assertContentEquals("header\ne0017d72714affa14ee435f57450d4364d2161e2f0abf90019964f1263c1d073,sample key\nebb59f4d65174fa86f81d0b37f2ee2d3d6dff4f1ccebc303416cf78e488a083e,123 address\n");
+    }
 }
