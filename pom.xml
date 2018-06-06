@@ -32,6 +32,8 @@
         <module>nifi-hash-services-api-nar</module>
         <module>nifi-hash-services</module>
         <module>nifi-hash-services-nar</module>
+        <module>nifi-hash-processors</module>
+        <module>nifi-hash-nar</module>
     </modules>
 
 </project>
