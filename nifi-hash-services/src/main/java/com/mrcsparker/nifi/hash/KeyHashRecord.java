@@ -7,33 +7,26 @@ import org.apache.nifi.annotation.behavior.SideEffectFree;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
-import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.ValidationContext;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.Validator;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
-import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
-import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
-import org.apache.nifi.processor.io.StreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.record.path.FieldValue;
 import org.apache.nifi.record.path.RecordPath;
 import org.apache.nifi.record.path.RecordPathResult;
-import org.apache.nifi.record.path.util.RecordPathCache;
 import org.apache.nifi.schema.access.SchemaNotFoundException;
 import org.apache.nifi.serialization.*;
 import org.apache.nifi.serialization.record.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -48,40 +41,9 @@ import java.util.stream.Collectors;
         + "be updated. The value of the Property is either a replacement value (optionally making use of the Expression Language) or is itself a RecordPath that extracts a value from "
         + "the Record. Whether the Property value is determined to be a RecordPath or a literal value depends on the configuration of the <Replacement Value Strategy> Property.")
 
-public class KeyHashRecord extends AbstractProcessor {
+public class KeyHashRecord extends AbstractRecordProcessor {
 
     static final Logger LOG = LoggerFactory.getLogger(KeyHashRecord.class);
-
-    static final PropertyDescriptor RECORD_READER = new PropertyDescriptor.Builder()
-            .name("record-reader")
-            .displayName("Record Reader")
-            .description("Specifies the Controller Service to use for reading incoming data")
-            .identifiesControllerService(RecordReaderFactory.class)
-            .required(true)
-            .build();
-    static final PropertyDescriptor RECORD_WRITER = new PropertyDescriptor.Builder()
-            .name("record-writer")
-            .displayName("Record Writer")
-            .description("Specifies the Controller Service to use for writing out the records")
-            .identifiesControllerService(RecordSetWriterFactory.class)
-            .required(true)
-            .build();
-
-    static final Relationship REL_SUCCESS = new Relationship.Builder()
-            .name("success")
-            .description("FlowFiles that are successfully transformed will be routed to this relationship")
-            .build();
-    static final Relationship REL_FAILURE = new Relationship.Builder()
-            .name("failure")
-            .description("If a FlowFile cannot be transformed from the configured input format to the configured output format, "
-                    + "the unchanged FlowFile will be routed to this relationship")
-            .build();
-
-    private String hashKey;
-    private String hashAlgorithm;
-
-    private volatile RecordPathCache recordPathCache;
-    private volatile List<String> recordPaths;
 
     static final PropertyDescriptor HASH_KEY = new PropertyDescriptor.Builder()
             .name("key")
@@ -133,16 +95,8 @@ public class KeyHashRecord extends AbstractProcessor {
                 .required(false)
                 .dynamic(true)
                 .addValidator(Validator.VALID)
-                .expressionLanguageSupported(true)
+                .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
                 .build();
-    }
-
-    @Override
-    public Set<Relationship> getRelationships() {
-        final Set<Relationship> relationships = new HashSet<>();
-        relationships.add(REL_SUCCESS);
-        relationships.add(REL_FAILURE);
-        return relationships;
     }
 
     @Override
@@ -161,23 +115,6 @@ public class KeyHashRecord extends AbstractProcessor {
                 .build());
     }
 
-    @OnScheduled
-    public void createRecordPaths(final ProcessContext context) {
-        recordPathCache = new RecordPathCache(context.getProperties().size() * 2);
-
-        final List<String> recordPaths = new ArrayList<>(context.getProperties().size() - 2);
-
-        for (final PropertyDescriptor property : context.getProperties().keySet()) {
-            if (property.isDynamic()) {
-                recordPaths.add(property.getName());
-            }
-        }
-
-        Collections.sort(recordPaths);
-
-        this.recordPaths = recordPaths;
-    }
-
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         FlowFile flowFile = session.get();
@@ -194,35 +131,32 @@ public class KeyHashRecord extends AbstractProcessor {
         final FlowFile original = flowFile;
         final Map<String, String> originalAttributes = flowFile.getAttributes();
         try {
-            flowFile = session.write(flowFile, new StreamCallback() {
-                @Override
-                public void process(final InputStream in, final OutputStream out) throws IOException {
+            flowFile = session.write(flowFile, (in, out) -> {
 
-                    try (final RecordReader reader = readerFactory.createRecordReader(originalAttributes, in, getLogger())) {
+                try (final RecordReader reader = readerFactory.createRecordReader(originalAttributes, in, original.getSize(), getLogger())) {
 
-                        final RecordSchema writeSchema = writerFactory.getSchema(originalAttributes, reader.getSchema());
-                        try (final RecordSetWriter writer = writerFactory.createWriter(getLogger(), writeSchema, out)) {
-                            writer.beginRecordSet();
+                    final RecordSchema writeSchema = writerFactory.getSchema(originalAttributes, reader.getSchema());
+                    try (final RecordSetWriter writer = writerFactory.createWriter(getLogger(), writeSchema, out, originalAttributes)) {
+                        writer.beginRecordSet();
 
-                            Record record;
-                            while ((record = reader.nextRecord()) != null) {
-                                final List<Record> processed = processRecords(record, writeSchema, original, context);
-                                for (Record r : processed) {
-                                    writer.write(r);
-                                }
+                        Record record;
+                        while ((record = reader.nextRecord()) != null) {
+                            final List<Record> processed = processRecords(record, writeSchema, original, context);
+                            for (Record r : processed) {
+                                writer.write(r);
                             }
-
-                            final WriteResult writeResult = writer.finishRecordSet();
-                            attributes.put("record.count", String.valueOf(writeResult.getRecordCount()));
-                            attributes.put(CoreAttributes.MIME_TYPE.key(), writer.getMimeType());
-                            attributes.putAll(writeResult.getAttributes());
-                            recordCount.set(writeResult.getRecordCount());
                         }
-                    } catch (final SchemaNotFoundException e) {
-                        throw new ProcessException(e.getLocalizedMessage(), e);
-                    } catch (final MalformedRecordException e) {
-                        throw new ProcessException("Could not parse incoming data", e);
+
+                        final WriteResult writeResult = writer.finishRecordSet();
+                        attributes.put("record.count", String.valueOf(writeResult.getRecordCount()));
+                        attributes.put(CoreAttributes.MIME_TYPE.key(), writer.getMimeType());
+                        attributes.putAll(writeResult.getAttributes());
+                        recordCount.set(writeResult.getRecordCount());
                     }
+                } catch (final SchemaNotFoundException e) {
+                    throw new ProcessException(e.getLocalizedMessage(), e);
+                } catch (final MalformedRecordException e) {
+                    throw new ProcessException("Could not parse incoming data", e);
                 }
             });
         } catch (final Exception e) {
@@ -244,8 +178,8 @@ public class KeyHashRecord extends AbstractProcessor {
         final String hashName = context.getProperty(HASH_NAME).getValue();
         final String plaintextName = context.getProperty(PLAINTEXT_NAME).getValue();
 
-        hashKey = context.getProperty(HASH_KEY).getValue();
-        hashAlgorithm = context.getProperty(HashUtils.HASH_ALGORITHM).getValue();
+        String hashKey = context.getProperty(HASH_KEY).getValue();
+        String hashAlgorithm = context.getProperty(HashUtils.HASH_ALGORITHM).getValue();
         if (hashAlgorithm.isEmpty()) {
             hashAlgorithm = HashUtils.HASH_SHA256.getValue();
         }
@@ -276,12 +210,6 @@ public class KeyHashRecord extends AbstractProcessor {
                 }
             }
         }
-
-
         return records;
     }
-
-
-
-
 }

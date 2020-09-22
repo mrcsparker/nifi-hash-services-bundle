@@ -29,12 +29,11 @@ import org.junit.Test;
 public class TestHashRecord {
     private TestRunner runner;
     private MockRecordParser readerService;
-    private MockRecordWriter writerService;
 
     @Before
     public void setup() throws InitializationException {
         readerService = new MockRecordParser();
-        writerService = new MockRecordWriter("header", false);
+        MockRecordWriter writerService = new MockRecordWriter("header", false);
 
         runner = TestRunners.newTestRunner(HashRecord.class);
         runner.addControllerService("reader", readerService);

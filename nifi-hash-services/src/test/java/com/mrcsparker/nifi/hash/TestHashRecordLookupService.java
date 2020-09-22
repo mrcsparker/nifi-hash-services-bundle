@@ -28,16 +28,16 @@ import java.util.Optional;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class TestHashRecordLookupService {
 
-    private TestRunner runner;
     private HashRecordLookupService service;
 
     @Before
     public void init() throws Exception {
         TestProcessor testProcessor = new TestProcessor();
-        runner = TestRunners.newTestRunner(testProcessor);
+        TestRunner runner = TestRunners.newTestRunner(testProcessor);
 
         service = new HashRecordLookupService();
         runner.addControllerService("com.mrcsparker.nifi.hash-pii-record-lookup-service", service);
@@ -74,7 +74,7 @@ public class TestHashRecordLookupService {
         final Optional<Record> get1 = service.lookup(criteria);
         assertTrue(get1.isPresent());
 
-        assertEquals(null, get1.get().getAsString("the-null-key"));
+        assertNull(get1.get().getAsString("the-null-key"));
     }
 
     @Test
