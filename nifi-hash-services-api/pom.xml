@@ -19,7 +19,7 @@
     <parent>
         <groupId>com.mrcsparker</groupId>
         <artifactId>nifi-hash-services-bundle</artifactId>
-        <version>1.5.0</version>
+        <version>1.12.0</version>
     </parent>
 
     <artifactId>nifi-hash-services-api</artifactId>

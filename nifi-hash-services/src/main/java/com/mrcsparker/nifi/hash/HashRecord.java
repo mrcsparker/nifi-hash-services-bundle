@@ -6,19 +6,22 @@ import org.apache.nifi.annotation.behavior.SideEffectFree;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
-import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.ValidationContext;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
+import org.apache.nifi.flowfile.attributes.CoreAttributes;
 import org.apache.nifi.processor.ProcessContext;
+import org.apache.nifi.processor.ProcessSession;
+import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.record.path.FieldValue;
 import org.apache.nifi.record.path.RecordPath;
 import org.apache.nifi.record.path.RecordPathResult;
-import org.apache.nifi.record.path.util.RecordPathCache;
 import org.apache.nifi.record.path.validation.RecordPathPropertyNameValidator;
-import org.apache.nifi.serialization.SimpleRecordSchema;
+import org.apache.nifi.schema.access.SchemaNotFoundException;
+import org.apache.nifi.serialization.*;
 import org.apache.nifi.serialization.record.MapRecord;
 import org.apache.nifi.serialization.record.Record;
 import org.apache.nifi.serialization.record.RecordField;
@@ -27,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -55,9 +59,6 @@ public class HashRecord extends AbstractRecordProcessor  {
     private String hashKey;
     private String hashAlgorithm;
 
-    private volatile RecordPathCache recordPathCache;
-    private volatile List<String> recordPaths;
-
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         final List<PropertyDescriptor> properties = new ArrayList<>(super.getSupportedPropertyDescriptors());
@@ -74,7 +75,7 @@ public class HashRecord extends AbstractRecordProcessor  {
                 .description("Specifies the value to use to replace fields in the record that match the RecordPath: " + propertyDescriptorName)
                 .required(false)
                 .dynamic(true)
-                .expressionLanguageSupported(true)
+                .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
                 .sensitive(false)
                 .addValidator(new RecordPathPropertyNameValidator())
                 .build();
@@ -96,23 +97,63 @@ public class HashRecord extends AbstractRecordProcessor  {
                 .build());
     }
 
-
-    @OnScheduled
-    public void createRecordPaths(final ProcessContext context) {
-        recordPathCache = new RecordPathCache(context.getProperties().size() * 2);
-
-        final List<String> recordPaths = new ArrayList<>(context.getProperties().size() - 2);
-        for (final PropertyDescriptor property : context.getProperties().keySet()) {
-            if (property.isDynamic()) {
-                recordPaths.add(property.getName());
-            }
+    @Override
+    public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
+        FlowFile flowFile = session.get();
+        if (flowFile == null) {
+            return;
         }
 
-        this.recordPaths = recordPaths;
+        final RecordReaderFactory readerFactory = context.getProperty(RECORD_READER).asControllerService(RecordReaderFactory.class);
+        final RecordSetWriterFactory writerFactory = context.getProperty(RECORD_WRITER).asControllerService(RecordSetWriterFactory.class);
+
+        final Map<String, String> attributes = new HashMap<>();
+        final AtomicInteger recordCount = new AtomicInteger();
+
+        final FlowFile original = flowFile;
+        final Map<String, String> originalAttributes = flowFile.getAttributes();
+        try {
+            flowFile = session.write(flowFile, (in, out) -> {
+
+                try (final RecordReader reader = readerFactory.createRecordReader(originalAttributes, in, original.getSize(), getLogger())) {
+
+                    final RecordSchema writeSchema = writerFactory.getSchema(originalAttributes, reader.getSchema());
+                    try (final RecordSetWriter writer = writerFactory.createWriter(getLogger(), writeSchema, out, originalAttributes)) {
+                        writer.beginRecordSet();
+
+                        Record record;
+                        while ((record = reader.nextRecord()) != null) {
+                            final Record processed = processRecord(record, writeSchema, original, context);
+                            writer.write(processed);
+                        }
+
+                        final WriteResult writeResult = writer.finishRecordSet();
+                        attributes.put("record.count", String.valueOf(writeResult.getRecordCount()));
+                        attributes.put(CoreAttributes.MIME_TYPE.key(), writer.getMimeType());
+                        attributes.putAll(writeResult.getAttributes());
+                        recordCount.set(writeResult.getRecordCount());
+                    }
+                } catch (final SchemaNotFoundException e) {
+                    throw new ProcessException(e.getLocalizedMessage(), e);
+                } catch (final MalformedRecordException e) {
+                    throw new ProcessException("Could not parse incoming data", e);
+                }
+            });
+        } catch (final Exception e) {
+            getLogger().error("Failed to process {}; will route to failure", new Object[] {flowFile, e});
+            session.transfer(flowFile, REL_FAILURE);
+            return;
+        }
+
+        flowFile = session.putAllAttributes(flowFile, attributes);
+        session.transfer(flowFile, REL_SUCCESS);
+
+        final int count = recordCount.get();
+        session.adjustCounter("Records Processed", count, false);
+        getLogger().info("Successfully converted {} records for {}", new Object[] {count, flowFile});
     }
 
-    @Override
-    protected Record process(Record record, RecordSchema writeSchema, FlowFile flowFile, ProcessContext context) {
+    protected Record processRecord(Record record, RecordSchema writeSchema, FlowFile flowFile, ProcessContext context) {
 
         hashKey = context.getProperty(HASH_KEY).getValue();
         hashAlgorithm = context.getProperty(HashUtils.HASH_ALGORITHM).getValue();
@@ -138,11 +179,9 @@ public class HashRecord extends AbstractRecordProcessor  {
             } else {
                 record = processRelativePath(replacementRecordPath, result.getSelectedFields(), record);
             }
-
         }
 
         return record;
-
     }
 
     private Record processAbsolutePath(final RecordPath replacementRecordPath, final Stream<FieldValue> destinationFields, final Record record) {
